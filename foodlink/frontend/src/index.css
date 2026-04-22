@@ -1,0 +1,50 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: #f8faf8;
+    color: #1a2e1a;
+  }
+}
+
+@layer components {
+  .card {
+    @apply bg-white rounded-2xl shadow-sm border border-green-50 p-6;
+  }
+  .btn-primary {
+    @apply bg-brand-600 hover:bg-brand-700 text-white font-medium px-5 py-2.5 rounded-xl transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none;
+  }
+  .btn-secondary {
+    @apply bg-white hover:bg-green-50 text-brand-700 font-medium px-5 py-2.5 rounded-xl border border-brand-200 transition-all duration-200 hover:border-brand-400;
+  }
+  .btn-danger {
+    @apply bg-red-50 hover:bg-red-100 text-red-700 font-medium px-5 py-2.5 rounded-xl border border-red-200 transition-all duration-200;
+  }
+  .input {
+    @apply w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:border-transparent transition-all bg-white text-gray-800 placeholder-gray-400;
+  }
+  .label {
+    @apply block text-sm font-medium text-gray-600 mb-1.5;
+  }
+  .badge-veg {
+    @apply inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-700;
+  }
+  .badge-nonveg {
+    @apply inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-red-100 text-red-700;
+  }
+  .badge-urgent {
+    @apply inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-orange-100 text-orange-700 animate-pulse-soft;
+  }
+  .stat-card {
+    @apply card flex flex-col gap-1 hover:shadow-md transition-shadow;
+  }
+}
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: #f1f5f1; }
+::-webkit-scrollbar-thumb { background: #86efac; border-radius: 3px; }
