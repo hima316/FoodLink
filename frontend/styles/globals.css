@@ -1,0 +1,284 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ==========================================
+   Import Google Fonts
+   ========================================== */
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap');
+
+/* ==========================================
+   CSS Custom Properties (Design Tokens)
+   ========================================== */
+@layer base {
+  :root {
+    /* Background */
+    --background: 0 0% 99%;
+    --foreground: 150 20% 8%;
+
+    /* Card */
+    --card: 0 0% 100%;
+    --card-foreground: 150 20% 8%;
+
+    /* Popover */
+    --popover: 0 0% 100%;
+    --popover-foreground: 150 20% 8%;
+
+    /* Primary - Forest Green */
+    --primary: 153 62% 27%;
+    --primary-foreground: 0 0% 98%;
+
+    /* Secondary - Sage */
+    --secondary: 150 20% 94%;
+    --secondary-foreground: 153 30% 20%;
+
+    /* Muted */
+    --muted: 150 10% 95%;
+    --muted-foreground: 150 8% 46%;
+
+    /* Accent - Fresh Green */
+    --accent: 152 50% 93%;
+    --accent-foreground: 153 40% 20%;
+
+    /* Destructive */
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 98%;
+
+    /* Border & Input */
+    --border: 150 15% 90%;
+    --input: 150 15% 88%;
+    --ring: 153 62% 27%;
+
+    /* Radius */
+    --radius: 0.75rem;
+
+    /* FoodLink custom */
+    --brand-green: #166534;
+    --brand-green-light: #22c55e;
+    --brand-earth: #92400e;
+    --brand-ocean: #1d4ed8;
+    --sidebar-width: 260px;
+  }
+
+  .dark {
+    --background: 150 15% 6%;
+    --foreground: 0 0% 95%;
+
+    --card: 150 12% 9%;
+    --card-foreground: 0 0% 93%;
+
+    --popover: 150 12% 9%;
+    --popover-foreground: 0 0% 93%;
+
+    --primary: 153 62% 45%;
+    --primary-foreground: 150 20% 6%;
+
+    --secondary: 150 12% 14%;
+    --secondary-foreground: 150 10% 80%;
+
+    --muted: 150 10% 14%;
+    --muted-foreground: 150 8% 55%;
+
+    --accent: 150 12% 16%;
+    --accent-foreground: 150 20% 85%;
+
+    --destructive: 0 63% 50%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 150 10% 16%;
+    --input: 150 10% 16%;
+    --ring: 153 60% 45%;
+  }
+}
+
+/* ==========================================
+   Base Styles
+   ========================================== */
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    scroll-behavior: smooth;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+    font-feature-settings: 'rlig' 1, 'calt' 1;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Syne', system-ui, sans-serif;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+
+  /* Scrollbar styling */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    @apply bg-muted;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-border rounded-full;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-muted-foreground/30;
+  }
+}
+
+/* ==========================================
+   Utility Classes
+   ========================================== */
+@layer utilities {
+  /* Glass morphism */
+  .glass {
+    background: rgba(255, 255, 255, 0.75);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+  }
+
+  .dark .glass {
+    background: rgba(10, 20, 14, 0.75);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  /* Premium card */
+  .card-premium {
+    @apply bg-card border border-border rounded-2xl shadow-card
+           transition-all duration-300 hover:shadow-card-hover;
+  }
+
+  /* Gradient text */
+  .text-gradient {
+    background: linear-gradient(135deg, #15803d 0%, #22c55e 50%, #16a34a 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .text-gradient-earth {
+    background: linear-gradient(135deg, #92400e 0%, #d97706 50%, #b45309 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* Skeleton loader */
+  .skeleton {
+    background: linear-gradient(
+      90deg,
+      hsl(var(--muted)) 25%,
+      hsl(var(--border)) 50%,
+      hsl(var(--muted)) 75%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+  }
+
+  /* Emergency pulse */
+  .emergency-pulse {
+    animation: emergency-glow 1.5s ease-in-out infinite;
+  }
+
+  @keyframes emergency-glow {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+    50% { box-shadow: 0 0 0 8px rgba(239, 68, 68, 0); }
+  }
+
+  /* Status dot */
+  .status-dot-online {
+    @apply w-2.5 h-2.5 rounded-full bg-emerald-500;
+    box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.2);
+    animation: status-pulse 2s ease-in-out infinite;
+  }
+
+  @keyframes status-pulse {
+    0%, 100% { box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.2); }
+    50% { box-shadow: 0 0 0 6px rgba(34, 197, 94, 0); }
+  }
+
+  /* Page transition */
+  .page-enter {
+    animation: fade-in-up 0.4s ease-out forwards;
+  }
+
+  /* Frosted sidebar */
+  .sidebar-frosted {
+    background: rgba(255, 255, 255, 0.85);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+  }
+
+  .dark .sidebar-frosted {
+    background: rgba(8, 16, 10, 0.9);
+  }
+
+  /* Hover lift */
+  .hover-lift {
+    @apply transition-transform duration-200;
+  }
+  .hover-lift:hover {
+    transform: translateY(-2px);
+  }
+
+  /* Focus ring */
+  .focus-ring {
+    @apply focus:outline-none focus:ring-2 focus:ring-primary/40 focus:ring-offset-2 focus:ring-offset-background;
+  }
+
+  /* Hide scrollbar but keep functionality */
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* ==========================================
+   Leaflet Map Overrides
+   ========================================== */
+.leaflet-container {
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  border-radius: 0.75rem;
+  z-index: 0;
+}
+
+.leaflet-popup-content-wrapper {
+  border-radius: 0.75rem !important;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15) !important;
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  padding: 0 !important;
+  overflow: hidden;
+}
+
+.leaflet-popup-content {
+  margin: 0 !important;
+}
+
+.leaflet-popup-tip {
+  background: white !important;
+}
+
+/* ==========================================
+   Recharts custom styles
+   ========================================== */
+.recharts-text {
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 12px;
+}
+
+.recharts-tooltip-wrapper {
+  border-radius: 0.75rem;
+  overflow: hidden;
+}
