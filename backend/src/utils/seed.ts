@@ -115,6 +115,20 @@ const sampleUsers = [
   },
   // Volunteers
   {
+    name: 'Veda',
+    email: 'veda@gmail.com',
+    password: 'veda2606',
+    role: 'volunteer',
+    phone: '+91-9111111121',
+    status: 'active',
+    isVerified: true,
+    emailVerified: true,
+    address: { city: 'Bangalore', state: 'Karnataka', country: 'India' },
+    location: { type: 'Point', coordinates: [77.5800, 12.9800] },
+    rating: 4,
+    totalPickups: 9,
+  },
+  {
     name: 'Amit Verma',
     email: 'amit.volunteer@gmail.com',
     password: 'Vol@1234',
@@ -128,20 +142,7 @@ const sampleUsers = [
     rating: 4.8,
     totalPickups: 23,
   },
-  {
-    name: 'Kavya Reddy',
-    email: 'kavya.volunteer@gmail.com',
-    password: 'Vol@1234',
-    role: 'volunteer',
-    phone: '+91-9101234567',
-    status: 'active',
-    isVerified: true,
-    emailVerified: true,
-    address: { city: 'Bangalore', state: 'Karnataka', country: 'India' },
-    location: { type: 'Point', coordinates: [77.5800, 12.9800] },
-    rating: 4.6,
-    totalPickups: 15,
-  },
+  
   {
     name: 'Ravi Nair',
     email: 'ravi.volunteer@gmail.com',
@@ -183,7 +184,7 @@ const seedDB = async (): Promise<void> => {
     const hotel1 = createdUsers.find(u => u.email === 'hotel@grandpalace.com');
     const hotel2 = createdUsers.find(u => u.email === 'info@spicegardenrestaurant.com');
     const ngo1 = createdUsers.find(u => u.email === 'contact@feedthehungry.org');
-    const volunteer1 = createdUsers.find(u => u.email === 'amit.volunteer@gmail.com');
+    const volunteer1 = createdUsers.find(u => u.email === 'veda@gmail.com');
 
     if (!hotel1 || !hotel2 || !ngo1 || !volunteer1) {
       throw new Error('Failed to find seeded users');
@@ -274,7 +275,7 @@ const seedDB = async (): Promise<void> => {
     console.log('🏨 Hotel 2:   info@spicegardenrestaurant.com / Hotel@1234');
     console.log('🏛️  NGO:       contact@feedthehungry.org / NGO@1234');
     console.log('🏛️  NGO 2:     info@annapoornaseva.org / NGO@1234');
-    console.log('🚗 Volunteer: amit.volunteer@gmail.com / Vol@1234');
+    console.log('🚗 Volunteer: veda@gmail.com / veda2606');
     console.log('─────────────────────────────────────\n');
 
   } catch (error) {
