@@ -2,7 +2,7 @@
 
 > Connecting surplus food from hotels & restaurants to NGOs and communities in need, with real-time delivery handled by volunteers.
 
-🔗 **Deployed Link:** https://food-link-t.vercel.app
+🔗 **Deployed Link:** https://food-link-eight.vercel.app
 
 ---
 
@@ -12,7 +12,6 @@ Every day, hotels and restaurants discard large quantities of surplus, edible fo
 
 The core issues are:
 - Lack of real-time coordination
-- Limited logistics support
 - Time-sensitive food expiry
 - Lack of volunteer support 
 - Poor visibility into donation impact
@@ -31,6 +30,7 @@ The core issues are:
 |  **Admin** | Oversees the entire platform, manages users, and monitors activity |
 
 By combining real-time notifications, automated donation workflows, volunteer coordination, interactive maps, and end-to-end status tracking, FoodLink enables surplus food to be identified, claimed, transported, and delivered efficiently before it expires, while providing transparency and measurable impact for all stakeholders.
+
 ---
 
 ## Tech Stack
@@ -231,7 +231,7 @@ flowchart TD
 - View nearby NGOs on map
 - Personal impact analytics 
 
-### NGO/Charity
+### NGO
 - Live feed of available donations, sorted by expiry urgency
 - Claim donations
 - Assign volunteers from a ratings-sorted list 
@@ -256,27 +256,28 @@ flowchart TD
 - Overall Analytics Page
 
 ---
+
 ## Local Setup Instructions
 
-# Clone repository
+### Clone repository
 ```bash
 git clone <repo-url>
 ```
 
-# Backend
+### Backend
 ```bash
 cd backend
 npm install
-p .env.example .env
+cp .env.example .env
 ```
 Open `.env` and fill in your `MONGODB_URI` and JWT secrets.
 
 ```bash
-npm run seed   # Creates demo accounts and sample data
+npm run seed 
 npm run dev  
 ``` 
 
-# Frontend
+### Frontend
 ```bash
 cd frontend
 npm install
@@ -286,8 +287,17 @@ Open `.env.local` and set `NEXT_PUBLIC_API_URL=http://localhost:5000/api/v1`
 
 ```bash
 npm run dev
+```
 
 Open `http://localhost:3000` in your browser.
 
-```
+---
+
+## Future Improvements
+
+- SMS, Email, and Push Notifications for critical donation updates
+- AI-powered donation prioritization based on expiry, quantity, and urgency
+- Smart NGO recommendation based on proximity, capacity, and food type
+- Real-time chat between Hotels, NGOs, and Volunteers
+- Multi-language support for improved accessibility
 
