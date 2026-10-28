@@ -50,30 +50,32 @@ app.use(
   })
 );
 
-// Rate limiting to prevent abuse
-const limiter = rateLimit({
-  windowMs: config.rateLimit.windowMs,  // 15 minutes
-  max: config.rateLimit.maxRequests,    // 100 requests per window
-  message: {
-    success: false,
-    message: 'Too many requests. Please try again later.',
-  },
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-app.use('/api', limiter);
+// Rate limiting to prevent abuse (disabled during testing)
+if (config.nodeEnv !== 'test') {
+  const limiter = rateLimit({
+    windowMs: config.rateLimit.windowMs,  // 15 minutes
+    max: config.rateLimit.maxRequests,    // 100 requests per window
+    message: {
+      success: false,
+      message: 'Too many requests. Please try again later.',
+    },
+    standardHeaders: true,
+    legacyHeaders: false,
+  });
+  app.use('/api', limiter);
 
-// Stricter rate limit for auth endpoints
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100,                   // 100 auth attempts
-  message: {
-    success: false,
-    message: 'Too many authentication attempts. Please try again in 15 minutes.',
-  },
-});
-app.use('/api/v1/auth/login', authLimiter);
-app.use('/api/v1/auth/register', authLimiter);
+  // Stricter rate limit for auth endpoints
+  const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 100,                   // 100 auth attempts
+    message: {
+      success: false,
+      message: 'Too many authentication attempts. Please try again in 15 minutes.',
+    },
+  });
+  app.use('/api/v1/auth/login', authLimiter);
+  app.use('/api/v1/auth/register', authLimiter);
+}
 
 // ==========================================
 // Body Parsing Middleware
@@ -190,6 +192,9 @@ const startServer = async (): Promise<void> => {
   }
 };
 
-startServer();
+if (process.env.NODE_ENV !== 'test') {
+  startServer();
+}
 
+export { startServer };
 export default app;

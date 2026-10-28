@@ -1,11 +1,13 @@
 import { Response } from 'express';
+import mongoose from 'mongoose';
 import Donation from '../models/Donation';
 import User from '../models/User';
 import Notification from '../models/Notification';
 import { AuthRequest } from '../types';
 import {
   sendSuccess, sendError, sendBadRequest,
-  sendNotFound, buildPagination, parsePaginationParams,
+  sendNotFound, sendConflict, sendForbidden,
+  buildPagination, parsePaginationParams,
 } from '../utils/response';
 import { geocodeAddress } from '../utils/geocode';
 import logger from '../config/logger';
@@ -167,6 +169,10 @@ export const getDonationById = async (req: AuthRequest, res: Response): Promise<
     if (!donation) { sendNotFound(res, 'Donation'); return; }
     sendSuccess(res, 'Donation retrieved.', { donation });
   } catch (error) {
+    if (error instanceof mongoose.Error.CastError) {
+      sendBadRequest(res, `Invalid ID format: ${error.value}`);
+      return;
+    }
     logger.error('Get donation error:', error);
     sendError(res, 'Failed to retrieve donation.', 500);
   }
@@ -177,31 +183,75 @@ export const getDonationById = async (req: AuthRequest, res: Response): Promise<
 // ==========================================
 export const claimDonation = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const ngoId    = req.user!.userId;
-    const donation = await Donation.findById(req.params.id);
+    const ngoId = req.user!.userId;
+    const now = new Date();
 
-    if (!donation)                      { sendNotFound(res, 'Donation'); return; }
-    if (donation.status !== 'available') { sendBadRequest(res, `Donation is already ${donation.status}.`); return; }
-    if (new Date() > donation.expiryTime) { sendBadRequest(res, 'Donation has already expired.'); return; }
-
-    const updated = await Donation.findByIdAndUpdate(
-      req.params.id,
-      { status: 'claimed', claimedBy: ngoId, claimedAt: new Date() },
+    // Atomic conditional update: only update if status is 'available' and not expired
+    const updated = await Donation.findOneAndUpdate(
+      {
+        _id: req.params.id,
+        status: 'available',
+        expiryTime: { $gt: now },
+      },
+      {
+        $set: {
+          status: 'claimed',
+          claimedBy: ngoId,
+          claimedAt: now,
+        },
+      },
       { new: true }
     ).populate('donor', 'name organizationName');
 
-    await User.findByIdAndUpdate(ngoId, { $inc: { totalReceived: 1 } });
-    await Notification.create({
-      recipient: donation.donor, sender: ngoId,
-      type: 'donation_claimed',
-      title: '✅ Your donation has been claimed!',
-      message: `An NGO has claimed: "${donation.title}"`,
-      data: { donationId: donation._id },
-    });
+    if (!updated) {
+      // Diagnostic lookup to return precise error code & message
+      const existing = await Donation.findById(req.params.id);
+      if (!existing) {
+        sendNotFound(res, 'Donation');
+        return;
+      }
+      if (existing.status !== 'available') {
+        sendConflict(res, `Donation is already ${existing.status}.`);
+        return;
+      }
+      if (existing.expiryTime <= now) {
+        if (existing.status === 'available') {
+          await Donation.findByIdAndUpdate(req.params.id, { status: 'expired' }).catch(() => {});
+        }
+        sendConflict(res, 'Donation has already expired.');
+        return;
+      }
+      sendConflict(res, 'Could not claim donation due to a concurrent conflict.');
+      return;
+    }
 
-    logger.info(`Donation ${donation._id} claimed by NGO ${ngoId}`);
+    // Only the single winning request reaches here
+    try {
+      await User.findByIdAndUpdate(ngoId, { $inc: { totalReceived: 1 } });
+    } catch (userErr) {
+      logger.error(`Failed to increment totalReceived for NGO ${ngoId}:`, userErr);
+    }
+
+    try {
+      await Notification.create({
+        recipient: updated.donor?._id || updated.donor,
+        sender: ngoId,
+        type: 'donation_claimed',
+        title: '✅ Your donation has been claimed!',
+        message: `An NGO has claimed: "${updated.title}"`,
+        data: { donationId: updated._id },
+      });
+    } catch (notifErr) {
+      logger.error(`Failed to create claim notification for donation ${updated._id}:`, notifErr);
+    }
+
+    logger.info(`Donation ${updated._id} claimed by NGO ${ngoId}`);
     sendSuccess(res, 'Donation claimed!', { donation: updated });
   } catch (error) {
+    if (error instanceof mongoose.Error.CastError) {
+      sendBadRequest(res, `Invalid ID format: ${error.value}`);
+      return;
+    }
     logger.error('Claim donation error:', error);
     sendError(res, 'Failed to claim donation.', 500);
   }
@@ -214,47 +264,81 @@ export const assignVolunteer = async (req: AuthRequest, res: Response): Promise<
   try {
     const { volunteerId } = req.body;
     if (!volunteerId) { sendBadRequest(res, 'Volunteer ID is required.'); return; }
-
-    const donation = await Donation.findById(req.params.id);
-    if (!donation) { sendNotFound(res, 'Donation'); return; }
-
-    if (donation.status !== 'claimed') {
-      sendBadRequest(res, `Cannot assign — donation is "${donation.status}".`); return;
-    }
-    if (req.user!.role !== 'admin' && donation.claimedBy?.toString() !== req.user!.userId) {
-      sendError(res, 'You can only assign volunteers to your own claimed donations.', 403); return;
+    if (!mongoose.Types.ObjectId.isValid(volunteerId)) {
+      sendBadRequest(res, 'Invalid volunteer ID format.');
+      return;
     }
 
     const volunteer = await User.findOne({ _id: volunteerId, role: 'volunteer', status: 'active' });
     if (!volunteer) { sendBadRequest(res, 'Volunteer not found or not active.'); return; }
 
-    const updated = await Donation.findByIdAndUpdate(
-      req.params.id,
-      { volunteer: volunteerId, status: 'in_transit', pickedUpAt: new Date() },
+    const filter: Record<string, unknown> = {
+      _id: req.params.id,
+      status: 'claimed',
+    };
+    if (req.user!.role !== 'admin') {
+      filter.claimedBy = req.user!.userId;
+    }
+
+    const now = new Date();
+    const updated = await Donation.findOneAndUpdate(
+      filter,
+      {
+        $set: {
+          volunteer: volunteerId,
+          status: 'in_transit',
+          pickedUpAt: now,
+        },
+      },
       { new: true }
     )
       .populate('donor',     'name organizationName')
       .populate('claimedBy', 'name organizationName')
       .populate('volunteer', 'name phone avatar');
 
-    await Notification.create({
-      recipient: volunteerId, sender: req.user!.userId,
-      type: 'volunteer_assigned',
-      title: '🚗 New pickup assignment!',
-      message: `You have been assigned to pick up: "${donation.title}"`,
-      data: { donationId: donation._id },
-    });
-    await Notification.create({
-      recipient: donation.donor, sender: req.user!.userId,
-      type: 'donation_picked_up',
-      title: '🚗 A volunteer is on the way!',
-      message: `A volunteer is collecting: "${donation.title}"`,
-      data: { donationId: donation._id },
-    });
+    if (!updated) {
+      const existing = await Donation.findById(req.params.id);
+      if (!existing) { sendNotFound(res, 'Donation'); return; }
+      if (req.user!.role !== 'admin' && existing.claimedBy?.toString() !== req.user!.userId) {
+        sendForbidden(res, 'You can only assign volunteers to your own claimed donations.');
+        return;
+      }
+      if (existing.status !== 'claimed') {
+        sendConflict(res, `Cannot assign — donation is currently "${existing.status}".`);
+        return;
+      }
+      sendConflict(res, 'Failed to assign volunteer due to a concurrent conflict.');
+      return;
+    }
 
-    logger.info(`Volunteer ${volunteerId} assigned to donation ${donation._id}`);
+    try {
+      await Notification.create({
+        recipient: volunteerId,
+        sender: req.user!.userId,
+        type: 'volunteer_assigned',
+        title: '🚗 New pickup assignment!',
+        message: `You have been assigned to pick up: "${updated.title}"`,
+        data: { donationId: updated._id },
+      });
+      await Notification.create({
+        recipient: updated.donor?._id || updated.donor,
+        sender: req.user!.userId,
+        type: 'donation_picked_up',
+        title: '🚗 A volunteer is on the way!',
+        message: `A volunteer is collecting: "${updated.title}"`,
+        data: { donationId: updated._id },
+      });
+    } catch (notifErr) {
+      logger.error('Assign volunteer notification error:', notifErr);
+    }
+
+    logger.info(`Volunteer ${volunteerId} assigned to donation ${updated._id}`);
     sendSuccess(res, 'Volunteer assigned!', { donation: updated });
   } catch (error) {
+    if (error instanceof mongoose.Error.CastError) {
+      sendBadRequest(res, `Invalid ID format: ${error.value}`);
+      return;
+    }
     logger.error('Assign volunteer error:', error);
     sendError(res, 'Failed to assign volunteer.', 500);
   }
@@ -265,20 +349,71 @@ export const assignVolunteer = async (req: AuthRequest, res: Response): Promise<
 // ==========================================
 export const markDelivered = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const donation = await Donation.findById(req.params.id);
-    if (!donation) { sendNotFound(res, 'Donation'); return; }
+    const filter: Record<string, unknown> = {
+      _id: req.params.id,
+      status: 'in_transit',
+    };
+    if (req.user!.role !== 'admin') {
+      filter.volunteer = req.user!.userId;
+    }
 
-    const updated = await Donation.findByIdAndUpdate(
-      req.params.id,
-      { status: 'delivered', deliveredAt: new Date() },
+    const now = new Date();
+    const updated = await Donation.findOneAndUpdate(
+      filter,
+      {
+        $set: {
+          status: 'delivered',
+          deliveredAt: now,
+        },
+      },
       { new: true }
     );
 
-    if (donation.volunteer) {
-      await User.findByIdAndUpdate(donation.volunteer, { $inc: { totalPickups: 1 } });
+    if (!updated) {
+      const existing = await Donation.findById(req.params.id);
+      if (!existing) { sendNotFound(res, 'Donation'); return; }
+      if (req.user!.role !== 'admin' && existing.volunteer?.toString() !== req.user!.userId) {
+        sendForbidden(res, 'You can only mark donations assigned to you as delivered.');
+        return;
+      }
+      if (existing.status === 'delivered') {
+        sendConflict(res, 'Donation is already marked as delivered.');
+        return;
+      }
+      sendConflict(res, `Cannot mark delivered: donation is currently "${existing.status}".`);
+      return;
     }
+
+    // Only the single winning request increments the volunteer counter
+    if (updated.volunteer) {
+      try {
+        await User.findByIdAndUpdate(updated.volunteer, { $inc: { totalPickups: 1 } });
+      } catch (userErr) {
+        logger.error(`Failed to increment totalPickups for volunteer ${updated.volunteer}:`, userErr);
+      }
+    }
+
+    try {
+      if (updated.claimedBy) {
+        await Notification.create({
+          recipient: updated.claimedBy,
+          sender: req.user!.userId,
+          type: 'donation_delivered',
+          title: '🎉 Donation Delivered!',
+          message: `Donation "${updated.title}" has been delivered successfully.`,
+          data: { donationId: updated._id },
+        });
+      }
+    } catch (notifErr) {
+      logger.error('Mark delivered notification error:', notifErr);
+    }
+
     sendSuccess(res, 'Donation marked as delivered!', { donation: updated });
   } catch (error) {
+    if (error instanceof mongoose.Error.CastError) {
+      sendBadRequest(res, `Invalid ID format: ${error.value}`);
+      return;
+    }
     logger.error('Mark delivered error:', error);
     sendError(res, 'Failed to mark delivered.', 500);
   }
@@ -289,19 +424,66 @@ export const markDelivered = async (req: AuthRequest, res: Response): Promise<vo
 // ==========================================
 export const deleteDonation = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const donation = await Donation.findById(req.params.id);
-    if (!donation) { sendNotFound(res, 'Donation'); return; }
-
-    if (req.user!.role !== 'admin' && donation.donor.toString() !== req.user!.userId) {
-      sendError(res, 'Not authorized.', 403); return;
-    }
-    if (['in_transit', 'delivered'].includes(donation.status)) {
-      sendBadRequest(res, 'Cannot cancel a donation in transit or delivered.'); return;
+    const filter: Record<string, unknown> = {
+      _id: req.params.id,
+      status: { $in: ['available', 'claimed'] },
+    };
+    if (req.user!.role !== 'admin') {
+      filter.donor = req.user!.userId;
     }
 
-    await Donation.findByIdAndUpdate(req.params.id, { status: 'cancelled' });
+    const updated = await Donation.findOneAndUpdate(
+      filter,
+      { $set: { status: 'cancelled' } },
+      { new: true }
+    );
+
+    if (!updated) {
+      const existing = await Donation.findById(req.params.id);
+      if (!existing) { sendNotFound(res, 'Donation'); return; }
+      if (req.user!.role !== 'admin' && existing.donor?.toString() !== req.user!.userId) {
+        sendForbidden(res, 'Not authorized to cancel this donation.');
+        return;
+      }
+      if (['in_transit', 'delivered'].includes(existing.status)) {
+        sendConflict(res, `Cannot cancel donation in "${existing.status}" status.`);
+        return;
+      }
+      if (existing.status === 'cancelled') {
+        sendConflict(res, 'Donation is already cancelled.');
+        return;
+      }
+      sendConflict(res, `Cannot cancel donation: donation is currently "${existing.status}".`);
+      return;
+    }
+
+    // If it was already claimed when cancelled, safely compensate the NGO's counter and send alert
+    if (updated.claimedBy) {
+      try {
+        await User.findOneAndUpdate(
+          { _id: updated.claimedBy, totalReceived: { $gt: 0 } },
+          { $inc: { totalReceived: -1 } }
+        );
+        await Notification.create({
+          recipient: updated.claimedBy,
+          sender: req.user!.userId,
+          type: 'system_alert',
+          title: '⚠️ Claimed Donation Cancelled',
+          message: `The donor cancelled: "${updated.title}"`,
+          data: { donationId: updated._id },
+        });
+      } catch (err) {
+        logger.error(`Error compensating NGO for cancelled donation ${updated._id}:`, err);
+      }
+    }
+
+    logger.info(`Donation ${updated._id} cancelled by ${req.user!.userId}`);
     sendSuccess(res, 'Donation cancelled.');
   } catch (error) {
+    if (error instanceof mongoose.Error.CastError) {
+      sendBadRequest(res, `Invalid ID format: ${error.value}`);
+      return;
+    }
     logger.error('Delete donation error:', error);
     sendError(res, 'Failed to delete donation.', 500);
   }
@@ -315,33 +497,77 @@ export const rateVolunteer = async (req: AuthRequest, res: Response): Promise<vo
     const { rating, feedback } = req.body;
     if (!rating || rating < 1 || rating > 5) { sendBadRequest(res, 'Rating must be 1–5.'); return; }
 
-    const donation = await Donation.findById(req.params.id);
-    if (!donation)                                            { sendNotFound(res, 'Donation'); return; }
-    if (donation.claimedBy?.toString() !== req.user!.userId) { sendError(res, 'Only the claiming NGO can rate.', 403); return; }
-    if (donation.status !== 'delivered')                     { sendBadRequest(res, 'Can only rate after delivery.'); return; }
-    if (!donation.volunteer)                                  { sendBadRequest(res, 'No volunteer assigned.'); return; }
-    if ((donation as unknown as { ngoRating?: number }).ngoRating) { sendBadRequest(res, 'Already rated.'); return; }
+    const filter: Record<string, unknown> = {
+      _id: req.params.id,
+      status: 'delivered',
+      volunteer: { $exists: true, $ne: null },
+      $or: [{ ngoRating: { $exists: false } }, { ngoRating: null }],
+    };
+    if (req.user!.role !== 'admin') {
+      filter.claimedBy = req.user!.userId;
+    }
 
-    await Donation.findByIdAndUpdate(req.params.id, {
-      ngoRating: rating, ngoFeedback: feedback || '', ratedAt: new Date(),
-    });
+    const updated = await Donation.findOneAndUpdate(
+      filter,
+      {
+        $set: {
+          ngoRating: rating,
+          ngoFeedback: feedback || '',
+          ratedAt: new Date(),
+        },
+      },
+      { new: true }
+    );
 
-    const ratedDonations = await Donation.find({
-      volunteer: donation.volunteer, status: 'delivered',
-      ngoRating: { $exists: true, $ne: null },
-    }).select('ngoRating');
+    if (!updated) {
+      const existing = await Donation.findById(req.params.id);
+      if (!existing) { sendNotFound(res, 'Donation'); return; }
+      if (req.user!.role !== 'admin' && existing.claimedBy?.toString() !== req.user!.userId) {
+        sendForbidden(res, 'Only the claiming NGO can rate.');
+        return;
+      }
+      if (existing.status !== 'delivered') {
+        sendConflict(res, 'Can only rate after delivery.');
+        return;
+      }
+      if (!existing.volunteer) {
+        sendBadRequest(res, 'No volunteer assigned.');
+        return;
+      }
+      if (existing.ngoRating) {
+        sendConflict(res, 'Already rated.');
+        return;
+      }
+      sendConflict(res, 'Failed to submit rating due to a conflict.');
+      return;
+    }
 
-    if (ratedDonations.length > 0) {
-      const avg = Math.round(
-        (ratedDonations.reduce((s, d) => s + ((d as unknown as { ngoRating?: number }).ngoRating || 0), 0) / ratedDonations.length) * 10
-      ) / 10;
-      await User.findByIdAndUpdate(donation.volunteer, { rating: avg });
-      logger.info(`Volunteer ${donation.volunteer} new avg rating: ${avg}`);
+    try {
+      const ratedDonations = await Donation.find({
+        volunteer: updated.volunteer,
+        status: 'delivered',
+        ngoRating: { $exists: true, $ne: null },
+      }).select('ngoRating');
+
+      if (ratedDonations.length > 0) {
+        const avg = Math.round(
+          (ratedDonations.reduce((s, d) => s + (d.ngoRating || 0), 0) / ratedDonations.length) * 10
+        ) / 10;
+        await User.findByIdAndUpdate(updated.volunteer, { rating: avg });
+        logger.info(`Volunteer ${updated.volunteer} new avg rating: ${avg}`);
+      }
+    } catch (err) {
+      logger.error('Error updating volunteer average rating:', err);
     }
 
     sendSuccess(res, 'Volunteer rated successfully!', { rating, feedback });
   } catch (error) {
+    if (error instanceof mongoose.Error.CastError) {
+      sendBadRequest(res, `Invalid ID format: ${error.value}`);
+      return;
+    }
     logger.error('Rate volunteer error:', error);
     sendError(res, 'Failed to submit rating.', 500);
   }
 };
+

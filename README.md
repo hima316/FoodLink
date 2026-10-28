@@ -257,6 +257,34 @@ flowchart TD
 
 ---
 
+## Concurrency & Atomicity Engineering Enhancements
+
+To prevent race conditions, double claiming, counter over-counting, and inconsistent state transitions in high-traffic or concurrent scenarios, the platform's core donation lifecycle implements conditional atomic updates:
+
+### 1. Conditional Atomic State Transitions
+- **Single-Winner Atomic Claiming:** NGOs claiming a donation execute a conditional `findOneAndUpdate` targeting `{ _id, status: 'available', expiryTime: { $gt: now } }`. Exactly one request wins the transition to `claimed`; all simultaneous competing requests receive `409 Conflict`.
+- **Atomic Volunteer Assignment:** Prevents multiple volunteers from being concurrently assigned to the same pickup. Only transitions if `{ status: 'claimed', claimedBy: req.user.userId }`, moving status atomically to `in_transit`.
+- **Idempotent Delivery & Pickup Counters:** Duplicate or retried `deliver` requests from volunteers use `{ status: 'in_transit', volunteer: req.user.userId }`. Only the winning transition marks the donation `delivered` and increments `totalPickups`, preventing duplicate counter increments.
+- **Single Rating Guarantee:** Volunteer ratings use `{ status: 'delivered', claimedBy: req.user.userId, $or: [{ ngoRating: { $exists: false } }, { ngoRating: null }] }`. Duplicate concurrent rating requests are rejected with `409 Conflict`.
+- **Atomic Cancellation & Counter Compensation:** Donors can only cancel donations in `available` or `claimed` status. If already claimed, the NGO's `totalReceived` counter is compensated with a guarded decrement (`{ totalReceived: { $gt: 0 } }`), preventing negative counts.
+
+### 2. Comprehensive Automated Concurrency Test Suite
+FoodLink includes an automated Jest & Supertest test suite (`src/__tests__/concurrency.test.ts`) that runs against an isolated test database (`foodlink_test`):
+- **Simultaneous 2-way & 5-way Concurrent Claims:** Verifies that under simultaneous `Promise.all` parallel requests, exactly 1 request receives `200 OK` and all other concurrent requests receive `409 Conflict`.
+- **Past-Expiry Claim Rejection:** Atomic validation ensures donations whose expiry timestamp has elapsed cannot be claimed.
+- **Concurrent Volunteer Assignment Races:** Conflicting volunteer assignments to the same donation result in exactly one assigned volunteer and no overwrites.
+- **Delivery Idempotency:** Duplicate delivery requests increment the volunteer's counter by exactly 1.
+- **Concurrent Cancellation vs Claim:** Deterministic resolution ensuring clean state without hybrid or corrupted records.
+- **Concurrent Rating Idempotency:** Simultaneous rating requests produce exactly one winner and accurately compute the volunteer's average rating.
+- **Lifecycle & Authorization Guardrails:** Rejects invalid lifecycle jumps (e.g. delivering available food, re-assigning in-transit food) and unowned actions with strict `403 Forbidden` / `409 Conflict`.
+- **Input Sanitization & Error Handling:** Validates ObjectIds and inputs, returning structured `400 Bad Request` instead of unhandled 500 errors.
+
+### 3. Architecture Consistency Limitations (Honest Disclosure)
+- **Single-Document vs Multi-Document Atomicity:** MongoDB guarantees ACID transactions on individual documents. While individual donation state transitions are atomic, associated side-effects across collections (e.g., updating user stats and inserting notification records) run in sequence after the primary document update.
+- **Fault Recovery:** In the event of a catastrophic process exit or database network partition between the primary status transition and secondary notification insertion, the primary state remains intact while secondary side-effects may require background reconciliation. Mitigation is implemented via defensive try/catch logging and non-negative counter constraints.
+
+---
+
 ## Local Setup Instructions
 
 ### Clone repository
@@ -275,6 +303,7 @@ Open `.env` and fill in your `MONGODB_URI` and JWT secrets.
 ```bash
 npm run seed 
 npm run dev  
+npm test     # Run concurrency & database consistency test suite
 ``` 
 
 ### Frontend

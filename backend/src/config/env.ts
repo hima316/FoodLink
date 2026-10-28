@@ -19,6 +19,27 @@ if (missingEnvVars.length > 0) {
   process.exit(1);
 }
 
+// Helper to safely isolate test database
+const resolveMongoUri = (): string => {
+  const isTest = process.env.NODE_ENV === 'test';
+  if (isTest && process.env.MONGODB_TEST_URI) {
+    return process.env.MONGODB_TEST_URI;
+  }
+  const rawUri = process.env.MONGODB_URI || '';
+  if (isTest && rawUri) {
+    const parts = rawUri.split('?');
+    const base = parts[0];
+    const query = parts[1] ? `?${parts[1]}` : '';
+    const lastSlash = base.lastIndexOf('/');
+    if (lastSlash !== -1) {
+      const dbName = base.substring(lastSlash + 1) || 'foodlink';
+      const testDbName = dbName.endsWith('_test') ? dbName : `${dbName}_test`;
+      return `${base.substring(0, lastSlash)}/${testDbName}${query}`;
+    }
+  }
+  return rawUri;
+};
+
 // Typed environment configuration object
 export const config = {
   // Server
@@ -29,7 +50,9 @@ export const config = {
   isProd: process.env.NODE_ENV === 'production',
 
   // Database
-  mongodbUri: process.env.MONGODB_URI as string,
+  get mongodbUri(): string {
+    return resolveMongoUri();
+  },
 
   // JWT
   jwt: {

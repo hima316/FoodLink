@@ -41,6 +41,9 @@ export interface IDonation extends Document {
   claimedAt?:              Date;
   pickedUpAt?:             Date;
   deliveredAt?:            Date;
+  ngoRating?:              number;
+  ngoFeedback?:            string;
+  ratedAt?:                Date;
   createdAt:               Date;
   updatedAt:               Date;
 }
@@ -110,6 +113,9 @@ const DonationSchema = new Schema<IDonation, DonationModel>(
     claimedAt:   { type: Date },
     pickedUpAt:  { type: Date },
     deliveredAt: { type: Date },
+    ngoRating:   { type: Number, min: 1, max: 5 },
+    ngoFeedback: { type: String, maxlength: 500 },
+    ratedAt:     { type: Date },
   },
   {
     timestamps: true,

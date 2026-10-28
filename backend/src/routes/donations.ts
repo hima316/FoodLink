@@ -7,6 +7,7 @@ import {
   assignVolunteer,
   markDelivered,
   deleteDonation,
+  rateVolunteer,
 } from '../controllers/donationController';
 import { authenticate, authorize } from '../middleware/auth';
 
@@ -32,6 +33,9 @@ router.patch('/:id/assign-volunteer', authorize('ngo', 'admin'), assignVolunteer
 
 // PATCH mark delivered (volunteers and admins)
 router.patch('/:id/deliver', authorize('volunteer', 'admin'), markDelivered);
+
+// PATCH rate volunteer (NGOs and admins)
+router.patch('/:id/rate-volunteer', authorize('ngo', 'admin'), rateVolunteer);
 
 // DELETE cancel donation (hotel owner or admin)
 router.delete('/:id', authorize('hotel', 'admin'), deleteDonation);

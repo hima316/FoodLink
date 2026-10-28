@@ -144,7 +144,6 @@ const UserSchema = new Schema<IUser, UserModel, IUserMethods>(
 // ==========================================
 // Indexes
 // ==========================================
-UserSchema.index({ email: 1 });
 UserSchema.index({ role: 1 });
 UserSchema.index({ status: 1 });
 UserSchema.index({ createdAt: -1 });

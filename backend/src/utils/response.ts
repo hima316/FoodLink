@@ -68,6 +68,12 @@ export const sendNotFound = (
 ): Response => sendError(res, `${resource} not found`, 404);
 
 /**
+ * Send a 409 Conflict error
+ */
+export const sendConflict = (res: Response, message: string): Response =>
+  sendError(res, message, 409);
+
+/**
  * Calculate pagination metadata
  */
 export const buildPagination = (

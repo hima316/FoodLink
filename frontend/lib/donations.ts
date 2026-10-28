@@ -88,6 +88,17 @@ export const donationService = {
   cancel: async (id: string): Promise<void> => {
     await api.delete(`/donations/${id}`);
   },
+
+  /**
+   * Rate a volunteer after delivery (NGO only)
+   */
+  rateVolunteer: async (
+    donationId: string,
+    rating: number,
+    feedback?: string
+  ): Promise<void> => {
+    await api.patch(`/donations/${donationId}/rate-volunteer`, { rating, feedback });
+  },
 };
 
 export default donationService;
